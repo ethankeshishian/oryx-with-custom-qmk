@@ -449,4 +449,29 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   return true;
 }
 
+/* CUSTOM */
+static inline int8_t key_side(keypos_t k) {
+    char flag = pgm_read_byte(&chordal_hold_layout[k.row][k.col]);
+    if (flag == 'L') return -1;
+    if (flag == 'R') return 1;
+    return 0;
+}
 
+static inline bool opposite_hand_mod_active(int8_t side) {
+    if (side == 0) return false;
+    uint8_t mods = get_mods() | get_oneshot_mods() | get_weak_mods();
+    const uint8_t left_mods  = MOD_BIT(KC_LCTL) | MOD_BIT(KC_LSFT) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LGUI);
+    const uint8_t right_mods = MOD_BIT(KC_RCTL) | MOD_BIT(KC_RSFT) | MOD_BIT(KC_RALT) | MOD_BIT(KC_RGUI);
+    return (side < 0) ? (mods & right_mods) : (mods & left_mods);
+}
+
+bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
+                      uint16_t other_keycode, keyrecord_t *other_record) {
+
+    int8_t side = key_side(tap_hold_record->event.key);
+    if (opposite_hand_mod_active(side)) {
+        return false;
+    }
+  
+    return get_chordal_hold_default(tap_hold_record, other_record);
+}
