@@ -468,10 +468,5 @@ static inline bool opposite_hand_mod_active(int8_t side) {
 bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
                       uint16_t other_keycode, keyrecord_t *other_record) {
 
-    int8_t side = key_side(tap_hold_record->event.key);
-    if (opposite_hand_mod_active(side)) {
-        return false;
-    }
-  
-    return get_chordal_hold_default(tap_hold_record, other_record);
+    return false;
 }
