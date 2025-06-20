@@ -450,69 +450,16 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 /* CUSTOM */
-/*───────────────────────────────────────────────────────────────────────────────
- *  Opposite-Hand Lock for Home-Row Mod-Taps  (collision-free version)
- *─────────────────────────────────────────────────────────────────────────────*/
-
-typedef enum { HAND_NONE = 0, HAND_LEFT, HAND_RIGHT } hand_t;
-
-/* Use your existing L/R map to decide which hand a key lives on */
-static inline hand_t hand_of(uint8_t r, uint8_t c) {
-    char s = pgm_read_byte(&chordal_hold_layout[r][c]);
-    return s == 'L' ? HAND_LEFT : s == 'R' ? HAND_RIGHT : HAND_NONE;
-}
-
-/* Generic mod-tap helpers */
-static inline bool     is_mt(uint16_t kc) { return (kc & 0xF000u) == QK_MOD_TAP; }
-static inline uint16_t tapkc(uint16_t kc) { return kc & 0x00FFu; }
-
-/* ───── state ───── */
-static hand_t   hold_hand        = HAND_NONE;
-static hand_t   candidate_hand   = HAND_NONE;
-static uint16_t candidate_timer  = 0;
-static uint8_t  down_left        = 0;
-static uint8_t  down_right       = 0;
-
-/* ───── intercept key events BEFORE your macro switch ───── */
-bool pre_process_record_user(uint16_t kc, keyrecord_t *rec) {
-    hand_t h = hand_of(rec->event.key.row, rec->event.key.col);
-
-    /* If a lock is active and this is an opposite-hand mod-tap → send tap, swallow */
-    if (rec->event.pressed && hold_hand != HAND_NONE && h != hold_hand && is_mt(kc)) {
-        tap_code16(tapkc(kc));
-        return false;                         /* stop further processing        */
+// Lower Tap Flow on shifts
+uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record,
+                           uint16_t prev_keycode) {
+    switch (keycode) {
+        case LSFT_T(KC_T):
+        case RSFT_T(KC_N):
+            return 50;
     }
-
-    /* Bookkeeping for candidate / holder                                    */
-    if (is_mt(kc)) {
-        if (rec->event.pressed) {
-            if (h == HAND_LEFT)  down_left++;
-            if (h == HAND_RIGHT) down_right++;
-
-            if (hold_hand == HAND_NONE && candidate_hand == HAND_NONE) {
-                candidate_hand  = h;
-                candidate_timer = timer_read();
-            }
-        } else {                              /* key released                  */
-            if (h == HAND_LEFT  && down_left)  down_left--;
-            if (h == HAND_RIGHT && down_right) down_right--;
-
-            if (h == hold_hand &&
-                ((h == HAND_LEFT  && !down_left) ||
-                 (h == HAND_RIGHT && !down_right)))
-                hold_hand = HAND_NONE;        /* lock lifts                    */
-
-            if (h == candidate_hand) candidate_hand = HAND_NONE;
-        }
+    if (is_flow_tap_key(keycode) && is_flow_tap_key(prev_keycode)) {
+        return FLOW_TAP_TERM;
     }
-    return true;                              /* let normal processing run     */
-}
-
-/* ───── periodic check ───── */
-void matrix_scan_user(void) {
-    if (hold_hand == HAND_NONE && candidate_hand != HAND_NONE &&
-        timer_elapsed(candidate_timer) > TAPPING_TERM) {
-        hold_hand      = candidate_hand;      /* candidate becomes holder      */
-        candidate_hand = HAND_NONE;
-    }
+    return 0;
 }
