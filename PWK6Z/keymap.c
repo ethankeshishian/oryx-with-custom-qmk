@@ -450,23 +450,79 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 }
 
 /* CUSTOM */
-static inline int8_t key_side(keypos_t k) {
-    char flag = pgm_read_byte(&chordal_hold_layout[k.row][k.col]);
-    if (flag == 'L') return -1;
-    if (flag == 'R') return 1;
-    return 0;
+/*───────────────────────────────────────────────────────────────────────────────
+ *  Opposite-Hand Lock for Home-Row Mod-Taps
+ *
+ *  - First home-row mod-tap that outlasts TAPPING_TERM becomes “the holder”.
+ *  - While a holder exists, every mod-tap on the *other* hand is forced to send
+ *    its tap key immediately (no modifier) and is ignored for tap/hold logic.
+ *  - Lock clears automatically when the last held mod-tap on the holder’s hand
+ *    is released.
+ *
+ *  Drop this at the bottom of keymap.c (or a separate .c).  No edits elsewhere.
+ *─────────────────────────────────────────────────────────────────────────────*/
+
+typedef enum { HAND_NONE = 0, HAND_LEFT, HAND_RIGHT } hand_t;
+
+/* Map matrix position to hand using your existing ‘chordal_hold_layout’. */
+static inline hand_t hand_of(uint8_t r, uint8_t c) {
+    char s = pgm_read_byte(&chordal_hold_layout[r][c]);
+    return s == 'L' ? HAND_LEFT : s == 'R' ? HAND_RIGHT : HAND_NONE;
 }
 
-static inline bool opposite_hand_mod_active(int8_t side) {
-    if (side == 0) return false;
-    uint8_t mods = get_mods() | get_oneshot_mods() | get_weak_mods();
-    const uint8_t left_mods  = MOD_BIT(KC_LCTL) | MOD_BIT(KC_LSFT) | MOD_BIT(KC_LALT) | MOD_BIT(KC_LGUI);
-    const uint8_t right_mods = MOD_BIT(KC_RCTL) | MOD_BIT(KC_RSFT) | MOD_BIT(KC_RALT) | MOD_BIT(KC_RGUI);
-    return (side < 0) ? (mods & right_mods) : (mods & left_mods);
+/* Helpers for identifying generic mod-taps (covers MT/ALL_T/MEH_T/…). */
+static inline bool     is_mt(uint16_t kc)  { return (kc & 0xF000u) == QK_MOD_TAP; }
+static inline uint16_t tapkc(uint16_t kc)  { return kc & 0x00FFu; }
+
+/* ───────── state ───────── */
+static hand_t   hold_hand        = HAND_NONE;   /* which hand is locked        */
+static hand_t   candidate_hand   = HAND_NONE;   /* first key awaiting TT       */
+static uint16_t candidate_timer  = 0;
+static uint8_t  down_left        = 0;           /* held mod-taps per hand      */
+static uint8_t  down_right       = 0;
+
+/* ───────── key events ───────── */
+bool process_record_kb(uint16_t kc, keyrecord_t *rec) {
+    hand_t h = hand_of(rec->event.key.row, rec->event.key.col);
+
+    /* If a lock is active and this is an opposite-hand mod-tap → tap & bail */
+    if (rec->event.pressed && hold_hand != HAND_NONE &&
+        h != hold_hand && is_mt(kc)) {
+        tap_code16(tapkc(kc));
+        return false;                 /* skip normal processing for this key   */
+    }
+
+    /* Normal bookkeeping for potential holders                           */
+    if (is_mt(kc)) {
+        if (rec->event.pressed) {
+            if (h == HAND_LEFT)  down_left++;
+            if (h == HAND_RIGHT) down_right++;
+
+            if (hold_hand == HAND_NONE && candidate_hand == HAND_NONE) {
+                candidate_hand  = h;
+                candidate_timer = timer_read();
+            }
+        } else {                      /* key released                          */
+            if (h == HAND_LEFT  && down_left)  down_left--;
+            if (h == HAND_RIGHT && down_right) down_right--;
+
+            if (h == hold_hand &&
+                ((h == HAND_LEFT  && !down_left) ||
+                 (h == HAND_RIGHT && !down_right)))
+                hold_hand = HAND_NONE;                /* lock lifted          */
+
+            if (h == candidate_hand) candidate_hand = HAND_NONE;
+        }
+    }
+    return process_record_user(kc, rec);       /* fall through to your code     */
 }
 
-bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
-                      uint16_t other_keycode, keyrecord_t *other_record) {
-
-    return false;
+/* ───────── periodic check ───────── */
+void matrix_scan_kb(void) {
+    if (hold_hand == HAND_NONE && candidate_hand != HAND_NONE &&
+        timer_elapsed(candidate_timer) > TAPPING_TERM) {
+        hold_hand      = candidate_hand;       /* candidate becomes holder      */
+        candidate_hand = HAND_NONE;
+    }
+    matrix_scan_user();                        /* preserve any user scan logic  */
 }
