@@ -471,3 +471,18 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   }
   return true;
 }
+
+/* CUSTOM */
+// Lower Tap Flow on shifts
+uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record,
+                           uint16_t prev_keycode) {
+    switch (keycode) {
+        case LSFT_T(KC_T):
+        case RSFT_T(KC_N):
+            return 50;
+    }
+    if (is_flow_tap_key(keycode) && is_flow_tap_key(prev_keycode)) {
+        return FLOW_TAP_TERM;
+    }
+    return 0;
+}
