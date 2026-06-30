@@ -133,27 +133,27 @@ combo_t key_combos[COMBO_COUNT] = {
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
         case KC_X:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case KC_C:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case KC_D:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case LT(4, KC_ENTER):
-            return TAPPING_TERM -15;
+            return TAPPING_TERM -100;
         case KC_TAB:
-            return TAPPING_TERM -45;
+            return TAPPING_TERM -130;
         case KC_H:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case KC_COMMA:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case KC_DOT:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         case KC_BSPC:
-            return TAPPING_TERM + 15;
+            return TAPPING_TERM -70;
         case KC_SPACE:
-            return TAPPING_TERM + 15;
+            return TAPPING_TERM -70;
         case KC_NO:
-            return TAPPING_TERM + 35;
+            return TAPPING_TERM -50;
         default:
             return TAPPING_TERM;
     }
@@ -244,9 +244,24 @@ bool rgb_matrix_indicators_user(void) {
 
 
 
-
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
   switch (keycode) {
+  case QK_MODS ... QK_MODS_MAX:
+    // Mouse and consumer keys (volume, media) with modifiers work inconsistently across operating systems,
+    // this makes sure that modifiers are always applied to the key that was pressed.
+    if (IS_CONSUMER_KEYCODE(QK_MODS_GET_BASIC_KEYCODE(keycode))) {
+      if (record->event.pressed) {
+        add_mods(QK_MODS_GET_MODS(keycode));
+        send_keyboard_report();
+        wait_ms(2);
+        register_code(QK_MODS_GET_BASIC_KEYCODE(keycode));
+        return false;
+      } else {
+        wait_ms(2);
+        del_mods(QK_MODS_GET_MODS(keycode));
+      }
+    }
+    break;
     case ST_MACRO_0:
     if (record->event.pressed) {
       SEND_STRING(SS_LCTL(SS_TAP(X_S))SS_DELAY(100)  SS_TAP(X_1));
