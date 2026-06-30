@@ -159,6 +159,20 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     }
 }
 
+uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_keycode) {
+    switch (keycode) {
+        // Disable Flow Tap on the home-row Shift keys so fast rolls into Shift
+        // (e.g. T+I -> "I", N+T -> "This") are not force-tapped during a typing
+        // streak. Opposite-hand holds are still gated by Chordal Hold; same-hand
+        // chords (e.g. N+E) remain protected by Chordal Hold's handedness rule.
+        case MT(MOD_LSFT, KC_T):
+        case MT(MOD_RSFT, KC_N):
+            return 0;
+        default:
+            return FLOW_TAP_TERM;
+    }
+}
+
 
 extern rgb_config_t rgb_matrix_config;
 
