@@ -505,3 +505,21 @@ uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_
     }
     return 0;
 }
+
+// Same-hand-only mods: a home-row mod may only be HELD in combination with keys
+// on the SAME hand. Opposite-hand combinations settle the mod as a tap (the
+// letter). Thumb keys (marked '*' in chordal_hold_layout) are exempt and may
+// combine with either hand. This inverts the stock Chordal Hold "opposite hands"
+// rule. Reads handedness from the existing chordal_hold_layout via
+// chordal_hold_handedness(). Returning true = hold, false = tap.
+bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
+                      uint16_t other_keycode, keyrecord_t *other_record) {
+    char self_hand  = chordal_hold_handedness(tap_hold_record->event.key);
+    char other_hand = chordal_hold_handedness(other_record->event.key);
+    // Thumbs are exempt: always allow the hold.
+    if (self_hand == '*' || other_hand == '*') {
+        return true;
+    }
+    // Hold only when both keys are on the same hand; otherwise settle as tap.
+    return self_hand == other_hand;
+}
