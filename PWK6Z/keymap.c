@@ -159,27 +159,6 @@ uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     }
 }
 
-uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_keycode) {
-    // Keep stock gating: Flow Tap only applies when both the current and the
-    // preceding key are alpha-area keys (and no Ctrl/Alt/GUI is held), matching
-    // QMK's default is_flow_tap_key().
-    if (is_flow_tap_key(keycode) && is_flow_tap_key(prev_keycode)) {
-        switch (keycode) {
-            // Disable Flow Tap on the home-row Shift keys so fast rolls into
-            // Shift (e.g. T+I -> "I", N+T -> "This") are not force-tapped during
-            // a typing streak. Opposite-hand holds still commit via Chordal Hold
-            // + Permissive Hold; same-hand chords (e.g. N+E) remain protected by
-            // Chordal Hold's handedness rule.
-            case MT(MOD_LSFT, KC_T):
-            case MT(MOD_RSFT, KC_N):
-                return 0;
-            default:
-                return FLOW_TAP_TERM;
-        }
-    }
-    return 0;
-}
-
 
 extern rgb_config_t rgb_matrix_config;
 
@@ -491,4 +470,23 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
       return false;
   }
   return true;
+}
+
+/* CUSTOM */
+// Disable Flow Tap on the home-row Shift keys so fast rolls into Shift
+// (e.g. T+I -> "I", N+T -> "This") are not force-tapped during a typing streak.
+// Opposite-hand holds still commit via Chordal Hold + Permissive Hold; same-hand
+// chords (e.g. N+E) remain protected by Chordal Hold's handedness rule. Keeps
+// stock gating via is_flow_tap_key() so the hotkey guard (Ctrl/Alt/GUI) applies.
+uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_keycode) {
+    if (is_flow_tap_key(keycode) && is_flow_tap_key(prev_keycode)) {
+        switch (keycode) {
+            case MT(MOD_LSFT, KC_T):
+            case MT(MOD_RSFT, KC_N):
+                return 0;
+            default:
+                return FLOW_TAP_TERM;
+        }
+    }
+    return 0;
 }
