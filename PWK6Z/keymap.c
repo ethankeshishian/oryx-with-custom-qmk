@@ -505,3 +505,37 @@ uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_
     }
     return 0;
 }
+
+// Same-hand-only modifier chords. A modifier stack may only be built from the 6
+// mod keys on ONE hand; the opposite hand can be MODIFIED by the stack but may
+// never JOIN it. Concretely: when a real modifier is already held on the other
+// hand, force any mod-tap on this hand to settle as a TAP. A force-tapped mod-tap
+// emits its tap keycode (picking up the already-held mods -> e.g. capital N) and
+// does NOT register its own modifier, so it cannot become a cross-hand chord
+// member (kills the "sn" -> Shift+Cmd case). All other cases fall through to the
+// stock opposite-hands rule via get_chordal_hold_default().
+//
+// Hand is read from the 8-bit mod state (get_mods): left mods occupy the low
+// nibble, right mods the high nibble. This requires each hand's 6 mods to carry
+// hand-matched sides (left keys = left-sided mods, right keys = right-sided),
+// including the upper-row Hyper/Meh keys (set hand-matched in Oryx). Thumbs are
+// '*' in chordal_hold_layout, are never 'L'/'R', and so are untouched here ->
+// they combine freely with any modifier.
+bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
+                      uint16_t other_keycode, keyrecord_t *other_record) {
+    if (IS_QK_MOD_TAP(tap_hold_keycode)) {
+        const uint8_t left_mods  = MOD_BIT_LCTRL | MOD_BIT_LSHIFT | MOD_BIT_LALT | MOD_BIT_LGUI;
+        const uint8_t right_mods = MOD_BIT_RCTRL | MOD_BIT_RSHIFT | MOD_BIT_RALT | MOD_BIT_RGUI;
+        uint8_t held = get_mods();
+        char hand = chordal_hold_handedness(tap_hold_record->event.key);
+        // A modifier is already held on the OPPOSITE hand -> tap this key.
+        if (hand == 'L' && (held & right_mods)) {
+            return false;
+        }
+        if (hand == 'R' && (held & left_mods)) {
+            return false;
+        }
+    }
+    // Everything else: stock opposite-hands behavior.
+    return get_chordal_hold_default(tap_hold_record, other_record);
+}
