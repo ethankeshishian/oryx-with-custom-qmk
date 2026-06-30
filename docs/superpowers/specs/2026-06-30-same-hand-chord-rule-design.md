@@ -69,15 +69,32 @@ Source facts that make this exact and safe (from `firmware25`):
 
 ## Design decisions (made with user)
 
-- **Detect "opposite-hand mod held" by mod side (L vs R).** Left home-row mods are
-  all LEFT-sided (`LCTL/LALT/LGUI/LSFT`), right ones all RIGHT-sided
-  (`RSFT/RGUI/RALT/RCTL`). So: a left-hand mod-tap interrupted while any
-  **right-sided** mod bit is held → force tap; a right-hand mod-tap while any
-  **left-sided** mod bit is held → force tap.
-- **Scope: only opposite-hand mod-tap keys.** Plain letters already tap and get
-  modified automatically; the override only needs to neutralize the home-row
-  mod-tap keys that could wrongly join the chord. Other keys fall through to the
-  stock default.
+- **Scope: all 6 modifier keys per hand**, not just the 4 home-row mods. Per hand:
+  the 4 home-row mods **plus** the 2 upper-row mod-taps (Hyper/Meh). The override
+  applies the same-hand-only-chord rule to all 6; plain letters and thumbs fall
+  through to stock behavior.
+  - Left 6: `ALL_T(KC_F)`, `MEH_T(KC_P)`, `MT(MOD_LCTL,KC_A)`, `MT(MOD_LALT,KC_R)`,
+    `MT(MOD_LGUI,KC_S)`, `MT(MOD_LSFT,KC_T)`.
+  - Right 6: right-sided Hyper(`U`), right-sided Meh(`L`), `MT(MOD_RSFT,KC_N)`,
+    `MT(MOD_RGUI,KC_E)`, `MT(MOD_RALT,KC_I)`, `MT(MOD_RCTL,KC_O)`.
+- **Detect "opposite-hand mod held" by mod side (L vs R).** A left-hand mod-tap
+  interrupted while any **right-sided** mod bit is held → force tap; a right-hand
+  mod-tap while any **left-sided** mod bit is held → force tap.
+- **Oryx-side prerequisite (user will do):** the two upper-row mods must be set to
+  **hand-matched sides** in Oryx, so mod *side* maps to physical *hand* for all 6
+  keys. Stock `ALL_T`/`MEH_T` are hardcoded LEFT-sided (`MOD_HYPR`/`MOD_MEH`); a
+  right-hand Meh/Hyper that registered left-sided bits would defeat mod-side
+  detection. After the Oryx change the right-hand upper mods register right-sided
+  bits (`MT(MOD_RCTL|MOD_RSFT|MOD_RALT|MOD_RGUI, KC_U)` and
+  `MT(MOD_RCTL|MOD_RSFT|MOD_RALT, KC_L)`). The override assumes this is in place;
+  **verify the built keymap's right-hand upper mods are right-sided before relying
+  on the rule** — if Oryx emits left-sided ones, mod-side detection misfires for
+  those two keys and we'd fall back to per-keycode special-casing.
+- **Scope of force-tap: only opposite-hand mod-tap keys.** Plain letters already
+  tap and get modified automatically; the override only neutralizes the mod-tap
+  keys that could wrongly join the chord.
+- **Config: `PERMISSIVE_HOLD` only — no `HOLD_ON_OTHER_KEY_PRESS`.** Same-hand
+  chords settle via permissive hold as they do today; no new config toggle.
 
 ## Implementation
 
@@ -104,18 +121,21 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
 }
 ```
 
+This covers all 6 mods per hand automatically: the guard keys on
+`IS_QK_MOD_TAP` + the key's `chordal_hold_handedness`, so home-row and upper-row
+(Hyper/Meh) mod-taps are treated identically — provided the upper-row mods carry
+hand-matched sides (Oryx prerequisite). Thumbs are `'*'` in `chordal_hold_layout`
+and are never `'L'`/`'R'`, so they fall through to default and combine freely.
+
 (Exact mod-bit macros / `IS_QK_MOD_TAP` spelling to be verified against
 `firmware25` headers during implementation; `chordal_hold_handedness` and
 `get_chordal_hold_default` are confirmed present in `action_tapping.c`.)
 
 ## Open / verify-at-implementation
 
-1. **`HOLD_ON_OTHER_KEY_PRESS` is currently OFF** (only `PERMISSIVE_HOLD` is set,
-   `config.h:6`). A `true` from `get_chordal_hold` means "eligible to hold," not
-   "settle as hold now." For deliberate same-hand chords (rule 1) to settle
-   *reliably* rather than depend on release order, we may need
-   `HOLD_ON_OTHER_KEY_PRESS` (or its per-key form) for the home-row mods.
-   Decide during implementation; it is a separate, reversible config toggle.
+1. **Right-hand upper mods must be right-sided** in the built keymap (Oryx
+   prerequisite above). Verify the merged `keymap.c` shows right-sided bits for
+   the `U`/`L` upper-row mods before trusting mod-side detection for those two.
 2. **Interaction with the existing `get_flow_tap_term`** (`keymap.c:496`): Flow
    Tap force-taps incoming mod-taps during a typing streak. With the new override
    enforcing rule 4 directly, the `return 0` on T/N (which previously reopened the
@@ -141,5 +161,8 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
 | hold T-left, hold N-right | `N` (capital), NOT Shift+Cmd | 4 ✅ key case |
 | hold T-left + S-left, tap N-right | Shift+GUI applied to N | 1 + 3 |
 | hold T-left, tap R-left (same hand) | `r` (lowercase, unmodified) | 2 |
+| hold Hyper-F-left, hold N-right | N modified, NOT joined to chord | 4 (upper-row) |
+| hold Meh-L-right, hold S-left | S modified, NOT joined to chord | 4 (upper-row) |
+| hold Hyper-F-left + S-left, tap E-right | Hyper+GUI applied to E | 1 + 3 (mixed rows) |
 | fast roll "this" | `this`, no stray caps/mods | regression |
-| thumb + any | unaffected | 5 |
+| thumb + any mod | combine freely, unaffected | 5 |
