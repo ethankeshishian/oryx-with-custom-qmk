@@ -130,8 +130,16 @@ combo_t key_combos[COMBO_COUNT] = {
     COMBO(combo1, TT(7)),
 };
 
+// Streak-dependent term for the Shift mod-taps; maintained in
+// pre_process_record_user (see the CUSTOM block below). Defined here so it is
+// visible to get_tapping_term; initialized to the fresh-start base term.
+static uint16_t shift_streak_term = 100; // == SHIFT_STREAK_BASE_TERM
+
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
+        case MT(MOD_LSFT, KC_T):
+        case MT(MOD_RSFT, KC_N):
+            return shift_streak_term;
         case KC_X:
             return TAPPING_TERM -50;
         case KC_C:
@@ -538,4 +546,42 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
     }
     // Everything else: stock opposite-hands behavior.
     return get_chordal_hold_default(tap_hold_record, other_record);
+}
+
+// Streak-dependent tapping term for the two Shift mod-taps (T / N).
+// After a pause the term is short (Shift holds quickly, e.g. deliberate
+// Shift+thumb); during a fast typing streak it grows so quick presses stay taps
+// and Shift does not fire mid-word. Ladder (min(250, 100 << streak)):
+//   fresh  -> 100
+//   +1 key -> 200
+//   +2     -> 250 (capped, stays 250)
+// The streak resets when the gap since the previous key is >= 200 ms.
+//
+// The term is computed HERE (at press time) and stored in shift_streak_term so
+// get_tapping_term can return a value that is stable across the multiple
+// WITHIN_TAPPING_TERM re-evaluations of a single Shift press (reading a live
+// timer inside get_tapping_term would drift and is unsafe).
+#define SHIFT_STREAK_RESET_MS 200
+#define SHIFT_STREAK_BASE_TERM 100
+#define SHIFT_STREAK_MAX_TERM 250
+
+static uint16_t shift_streak_prev_time = 0;
+static uint8_t  shift_streak_count = 0;
+// shift_streak_term is defined above get_tapping_term (needs to be visible there).
+
+bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
+    if (record->event.pressed) {
+        uint16_t gap = TIMER_DIFF_16(record->event.time, shift_streak_prev_time);
+        if (gap >= SHIFT_STREAK_RESET_MS) {
+            shift_streak_count = 0;
+        } else if (shift_streak_count < 8) {
+            shift_streak_count++;
+        }
+        shift_streak_prev_time = record->event.time;
+
+        uint32_t term = (uint32_t)SHIFT_STREAK_BASE_TERM << shift_streak_count;
+        shift_streak_term = (term > SHIFT_STREAK_MAX_TERM) ? SHIFT_STREAK_MAX_TERM
+                                                           : (uint16_t)term;
+    }
+    return true;
 }
