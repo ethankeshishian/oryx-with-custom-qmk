@@ -133,7 +133,7 @@ combo_t key_combos[COMBO_COUNT] = {
 // Streak-dependent term for the Shift mod-taps; maintained in
 // pre_process_record_user (see the CUSTOM block below). Defined here so it is
 // visible to get_tapping_term; initialized to the fresh-start base term.
-static uint16_t shift_streak_term = 100; // == SHIFT_STREAK_BASE_TERM
+static uint16_t shift_streak_term = 75; // == SHIFT_STREAK_FRESH_TERM (boot default)
 
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
@@ -549,18 +549,25 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
 }
 
 // Streak-dependent tapping term for the two Shift mod-taps (T / N). Two levels:
-//   fresh (gap since previous key >= 200 ms) -> 100  (Shift holds quickly, e.g.
+//   fresh (gap since previous key >= 200 ms) -> 75   (Shift holds quickly, e.g.
 //                                                     a deliberate Shift+thumb)
 //   mid-streak (gap < 200 ms)                -> TAPPING_TERM (250; quick presses
 //                                                     stay taps, Shift does not
 //                                                     fire mid-word)
+//
+// Backspace (either the plain thumb KC_BSPC or the LT(5,KC_BSPC) layer-tap)
+// signals "fixing a typo", so it resets the streak: the NEXT key is treated as
+// fresh regardless of how fast it follows. This is done by back-dating
+// shift_streak_prev_time by SHIFT_STREAK_RESET_MS so the next key's gap is
+// guaranteed >= the reset window (TIMER_DIFF_16 is modular, so this is correct
+// even across the 16-bit timer wrap).
 //
 // The term is computed HERE (at press time) and stored in shift_streak_term so
 // get_tapping_term can return a value that is stable across the multiple
 // WITHIN_TAPPING_TERM re-evaluations of a single Shift press (reading a live
 // timer inside get_tapping_term would drift and is unsafe).
 #define SHIFT_STREAK_RESET_MS 200
-#define SHIFT_STREAK_FRESH_TERM 100
+#define SHIFT_STREAK_FRESH_TERM 75
 
 static uint16_t shift_streak_prev_time = 0;
 // shift_streak_term is defined above get_tapping_term (needs to be visible there).
@@ -570,7 +577,14 @@ bool pre_process_record_user(uint16_t keycode, keyrecord_t *record) {
         uint16_t gap = TIMER_DIFF_16(record->event.time, shift_streak_prev_time);
         shift_streak_term = (gap >= SHIFT_STREAK_RESET_MS) ? SHIFT_STREAK_FRESH_TERM
                                                            : TAPPING_TERM;
-        shift_streak_prev_time = record->event.time;
+
+        // Backspace -> make the NEXT key fresh: back-date prev_time so its gap
+        // is >= SHIFT_STREAK_RESET_MS. Otherwise record this key's press time.
+        if (keycode == KC_BSPC || keycode == LT(5, KC_BSPC)) {
+            shift_streak_prev_time = record->event.time - SHIFT_STREAK_RESET_MS;
+        } else {
+            shift_streak_prev_time = record->event.time;
+        }
     }
     return true;
 }
