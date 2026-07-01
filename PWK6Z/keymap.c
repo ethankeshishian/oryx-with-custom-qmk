@@ -133,7 +133,7 @@ combo_t key_combos[COMBO_COUNT] = {
 // Streak-dependent term for the Shift mod-taps; maintained in
 // pre_process_record_user (see the CUSTOM block below). Defined here so it is
 // visible to get_tapping_term; initialized to the fresh-start base term.
-static uint16_t shift_streak_term = 75; // == SHIFT_STREAK_FRESH_TERM (boot default)
+static uint16_t shift_streak_term = 85; // == SHIFT_STREAK_FRESH_TERM (boot default)
 
 uint16_t get_tapping_term(uint16_t keycode, keyrecord_t *record) {
     switch (keycode) {
@@ -506,6 +506,13 @@ uint16_t get_flow_tap_term(uint16_t keycode, keyrecord_t *record, uint16_t prev_
         switch (keycode) {
             case MT(MOD_LSFT, KC_T):
             case MT(MOD_RSFT, KC_N):
+            // Left Opt (R) and left Cmd (S): exempt from Flow Tap so they hold
+            // freely after a typing streak, enabling Opt+Backspace (delete word)
+            // and Cmd+Backspace (delete line) to fix a typo. Trade-off: r/s are
+            // common letters, so fast mid-word s/r rolls may occasionally fire
+            // Opt/Cmd.
+            case MT(MOD_LALT, KC_R):
+            case MT(MOD_LGUI, KC_S):
                 return 0;
             default:
                 return FLOW_TAP_TERM;
@@ -549,7 +556,7 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
 }
 
 // Streak-dependent tapping term for the two Shift mod-taps (T / N). Two levels:
-//   fresh (gap since previous key >= 200 ms) -> 75   (Shift holds quickly, e.g.
+//   fresh (gap since previous key >= 200 ms) -> 85   (Shift holds quickly, e.g.
 //                                                     a deliberate Shift+thumb)
 //   mid-streak (gap < 200 ms)                -> TAPPING_TERM (250; quick presses
 //                                                     stay taps, Shift does not
@@ -567,7 +574,7 @@ bool get_chordal_hold(uint16_t tap_hold_keycode, keyrecord_t *tap_hold_record,
 // WITHIN_TAPPING_TERM re-evaluations of a single Shift press (reading a live
 // timer inside get_tapping_term would drift and is unsafe).
 #define SHIFT_STREAK_RESET_MS 200
-#define SHIFT_STREAK_FRESH_TERM 75
+#define SHIFT_STREAK_FRESH_TERM 85
 
 static uint16_t shift_streak_prev_time = 0;
 // shift_streak_term is defined above get_tapping_term (needs to be visible there).
